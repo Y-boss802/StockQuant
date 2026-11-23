@@ -1,0 +1,666 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>量析 StockQuant · 股票量化分析工作台</title>
+<link rel="icon" type="image/png" href="icon.png?v=2">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#070b16">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="量析">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="stylesheet" href="style.css?v=2026111703">
+</head>
+<body>
+
+<div id="connBanner" class="conn-banner" hidden>
+  <strong>未连接到本地分析服务</strong>
+  <span>请关闭本页，双击桌面「量析 StockQuant」快捷方式启动；不要直接打开 index.html 文件。</span>
+  <button type="button" id="retryBtn">重新检测</button>
+</div>
+
+<div class="bg-glow" aria-hidden="true"></div>
+
+<header class="topbar">
+  <a class="brand" href="#" id="brandLink">
+    <span class="logo">
+      <svg viewBox="0 0 64 64" width="30" height="30" aria-hidden="true">
+        <defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#6d8cff"/><stop offset="1" stop-color="#3b54d6"/>
+        </linearGradient></defs>
+        <rect width="64" height="64" rx="16" fill="url(#lg)"/>
+        <path d="M14 45 L27 29 L37 38 L51 17" stroke="#fff" stroke-width="6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </span>
+    <span class="brand-text">
+      <strong>量析 StockQuant</strong>
+      <small>股票量化分析工作台</small>
+    </span>
+  </a>
+
+  <div class="search-wrap">
+    <form id="searchForm" class="search" autocomplete="off">
+      <svg class="search-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+        <circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"/>
+        <path d="M16.5 16.5 L21 21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+      <input id="query" type="text" placeholder="输入名称或代码：贵州茅台 / 苹果 / AAPL / 黄金 / 原油" aria-label="股票名称或代码" spellcheck="false">
+      <select id="yearSelect" class="year-select" title="分析区间" aria-label="分析区间">
+        <option value="1">1年</option>
+        <option value="3" selected>3年</option>
+        <option value="5">5年</option>
+        <option value="10">10年</option>
+        <option value="20">20年</option>
+        <option value="30">全部</option>
+      </select>
+      <button type="submit" class="btn-primary" id="analyzeBtn">开始分析</button>
+    </form>
+    <div id="suggest" class="suggest" hidden role="listbox"></div>
+    <div class="chips" id="chips">
+      <span class="chips-label">热门：</span>
+      <button type="button" data-q="贵州茅台">贵州茅台</button>
+      <button type="button" data-q="苹果">苹果</button>
+      <button type="button" data-q="英伟达">英伟达</button>
+      <button type="button" data-q="特斯拉">特斯拉</button>
+      <button type="button" data-q="黄金">黄金</button>
+      <button type="button" data-q="原油">原油</button>
+    </div>
+  </div>
+
+  <div class="top-actions">
+    <button type="button" class="ghost-btn" id="backBtn" hidden>← 返回</button>
+    <button type="button" class="ghost-btn" id="mobileBtn">手机</button>
+    <button type="button" class="ghost-btn" id="predictBtn">预测</button>
+    <button type="button" class="ghost-btn" id="rankBtn">涨跌榜</button>
+    <button type="button" class="ghost-btn" id="scoreBtn">评分板</button>
+    <button type="button" class="ghost-btn" id="simBtn">模拟</button>
+    <button type="button" class="ghost-btn" id="paperBtn">模拟盘</button>
+    <button type="button" class="ghost-btn" id="researchBtn">研究</button>
+    <button type="button" class="ghost-btn" id="strategyBtn">策略</button>
+    <label class="switch" title="每 20 秒刷新一次实时报价">
+      <input type="checkbox" id="autoRefresh" checked>
+      <span class="switch-track"><span class="switch-dot"></span></span>
+      <span class="switch-label">实时</span>
+    </label>
+    <a id="externalLink" class="ghost-btn" href="https://gu.qq.com/" target="_blank" rel="noopener">行情网页 ↗</a>
+  </div>
+</header>
+
+<main class="page">
+
+  <!-- ============ 隔日预测 ============ -->
+  <section id="predictView" class="rank-view" hidden>
+    <div class="rank-head">
+      <div>
+        <h1>隔日预测</h1>
+        <p id="predictMeta">A 股 · 基于当日量价形态的规则模型</p>
+      </div>
+      <div class="rank-actions">
+        <div class="tabs" id="predictTabs">
+          <button type="button" data-market="cn" class="active">A 股</button>
+          <button type="button" data-market="us">美股</button>
+        </div>
+        <button type="button" id="reviewBtn" class="btn-ghost">复盘</button>
+        <button type="button" id="predictRefresh" class="btn-ghost">刷新</button>
+        <button type="button" id="predictClose" class="btn-ghost">返回</button>
+      </div>
+    </div>
+    <div class="rank-grid">
+      <div class="card rank-card">
+        <header class="rank-card-head">
+          <span class="rank-title up">看涨 10 只</span>
+          <span class="rank-note">方向 + 幅度 · 规则模型</span>
+        </header>
+        <div class="rank-table" id="predictUp"></div>
+      </div>
+      <div class="card rank-card">
+        <header class="rank-card-head">
+          <span class="rank-title down">看跌 10 只</span>
+          <span class="rank-note">方向 + 幅度 · 规则模型</span>
+        </header>
+        <div class="rank-table" id="predictDown"></div>
+      </div>
+    </div>
+    <p class="predict-note">模型仅使用当日涨跌幅、收盘位置与换手率估算次日方向与幅度（含 ± 区间），
+      属于规则化形态信号，并非机器学习预测，也不构成投资建议。</p>
+  </section>
+
+  <!-- ============ 预测复盘 ============ -->
+  <section id="reviewView" class="rank-view" hidden>
+    <div class="rank-head">
+      <div>
+        <h1>预测复盘</h1>
+        <p id="reviewMeta">对比预测方向、幅度与次日实际涨跌</p>
+      </div>
+      <div class="rank-actions">
+        <div class="tabs" id="reviewTabs">
+          <button type="button" data-market="cn" class="active">A 股</button>
+          <button type="button" data-market="us">美股</button>
+        </div>
+        <button type="button" id="reviewRefresh" class="btn-ghost">刷新</button>
+        <button type="button" id="reviewBack" class="btn-ghost">返回预测</button>
+      </div>
+    </div>
+    <div class="review-stats" id="reviewStats"></div>
+    <div class="card"><div class="rank-table" id="reviewTable"></div></div>
+    <p class="predict-note">预测在生成日收盘后存档，取下一交易日收盘价对比；“命中”指涨跌方向一致，
+      偏差 = 实际涨跌幅 − 预测涨跌幅。</p>
+  </section>
+  <!-- ============ 数据质量 ============ -->
+  <section id="qualityView" class="rank-view" hidden>
+    <div class="rank-head">
+      <div><h1>数据质量</h1><p id="qualityMeta">K 线 · 缺失 · 零成交 · 极端波动 · 滞后</p></div>
+      <div class="rank-actions">
+        <div class="tabs" id="qualityTabs">
+          <button type="button" data-market="cn" class="active">A 股</button>
+          <button type="button" data-market="us">美股</button>
+        </div>
+        <button type="button" id="qualityRun" class="btn-ghost">刷新</button>
+        <button type="button" id="qualityClose" class="btn-ghost">返回研究</button>
+      </div>
+    </div>
+    <div id="qualityResult"></div>
+  </section>
+
+  <!-- ============ 基本面 ============ -->
+  <section id="fundamentalView" class="rank-view" hidden>
+    <div class="rank-head">
+      <div><h1>基本面与事件</h1><p id="fundamentalMeta">行业 · 估值 · 盈利 · 新闻情绪与预期差</p></div>
+      <div class="rank-actions">
+        <div class="tabs" id="fundamentalTabs">
+          <button type="button" data-market="cn" class="active">A 股</button>
+          <button type="button" data-market="us">美股</button>
+        </div>
+        <button type="button" id="fundamentalRun" class="btn-primary">加载</button>
+        <button type="button" id="fundamentalClose" class="btn-ghost">返回研究</button>
+      </div>
+    </div>
+    <div id="fundamentalResult"></div>
+  </section>
+
+  <!-- ============ 组合优化 ============ -->
+  <section id="portfolioView" class="rank-view" hidden>
+    <div class="rank-head">
+      <div>
+        <h1>组合优化</h1>
+        <p id="portfolioMeta">协方差收缩 · 仅做多 · 单票上限</p>
+      </div>
+      <div class="rank-actions">
+        <div class="tabs" id="portfolioTabs">
+          <button type="button" data-market="cn" class="active">A 股</button>
+          <button type="button" data-market="us">美股</button>
+        </div>
+        <button type="button" id="portfolioClose" class="btn-ghost">返回研究</button>
+      </div>
+    </div>
+    <div class="card sim-form-card">
+      <div class="sim-form">
+        <div class="sim-field">方法
+          <div class="tabs" id="portfolioMethods">
+            <button type="button" data-method="max_sharpe" class="active">最大夏普</button>
+            <button type="button" data-method="min_var">最小方差</button>
+            <button type="button" data-method="risk_parity">风险平价</button>
+            <button type="button" data-method="max_div">最大分散</button>
+          </div>
+        </div>
+        <div class="sim-field">单票上限
+          <div class="tabs" id="portfolioCaps">
+            <button type="button" data-cap="0.2">20%</button>
+            <button type="button" data-cap="0.25" class="active">25%</button>
+            <button type="button" data-cap="0.3">30%</button>
+          </div>
+        </div>
+        <button type="button" id="portfolioRun" class="btn-primary">运行优化</button>
+      </div>
+      <p class="sim-hint">股票池为评分板前 20；Ledoit-Wolf 协方差收缩；仅做多；不含交易成本与税费。</p>
+    </div>
+    <div id="portfolioResult"></div>
+  </section>
+
+  <!-- ============ 模拟盘 ============ -->
+  <section id="paperView" class="rank-view" hidden>
+    <div class="rank-head">
+      <div><h1>模拟盘</h1><p id="paperMeta">纸面交易 · 实时盯市</p></div>
+      <div class="rank-actions">
+        <div class="tabs" id="paperTabs">
+          <button type="button" data-market="cn" class="active">A 股</button>
+          <button type="button" data-market="us">美股</button>
+        </div>
+        <button type="button" id="paperNotify" class="btn-ghost">通知</button>
+        <button type="button" id="paperReset" class="btn-ghost">重置</button>
+        <button type="button" id="paperClose" class="btn-ghost">返回</button>
+      </div>
+    </div>
+    <div class="card sim-form-card">
+      <div class="sim-form">
+        <label class="sim-field">代码 / 名称
+          <span class="sim-input"><input id="paperQuery" placeholder="600519 / AAPL"></span>
+        </label>
+        <label class="sim-field">数量
+          <span class="sim-input"><input id="paperQty" type="number" min="1" value="100"></span>
+        </label>
+        <button type="button" id="paperBuy" class="btn-primary">买入</button>
+        <button type="button" id="paperSell" class="btn-ghost">卖出</button>
+      </div>
+      <p class="sim-hint" id="paperHint">A 股 100 股/手、佣金最低 5 元、卖出印花税 0.05%；美股 1 股起、佣金 0。</p>
+    </div>
+    <div id="paperResult"></div>
+    <div id="monitorResult" class="monitor-panel"></div>
+  </section>
+
+  <!-- ============ 量化策略 ============ -->
+  <section id="strategyView" class="rank-view" hidden>
+    <div class="rank-head">
+      <div><h1>量化策略</h1><p id="strategyMeta">风险调整动量 · 月度调仓 · 前 N 等权</p></div>
+      <div class="rank-actions">
+        <div class="tabs" id="strategyTabs">
+          <button type="button" data-market="cn" class="active">A 股</button>
+          <button type="button" data-market="us">美股</button>
+        </div>
+        <button type="button" id="trackStart" class="btn-ghost">开始跟踪</button>
+        <button type="button" id="trackRefresh" class="btn-ghost">刷新跟踪</button>
+        <button type="button" id="strategyClose" class="btn-ghost">返回</button>
+      </div>
+    </div>
+    <div class="card sim-form-card">
+      <div class="sim-form">
+        <div class="sim-field">动量窗口
+          <div class="tabs" id="strategyLookback">
+            <button type="button" data-lookback="20">20 日</button>
+            <button type="button" data-lookback="60" class="active">60 日</button>
+            <button type="button" data-lookback="120">120 日</button>
+          </div>
+        </div>
+        <div class="sim-field">持仓数
+          <div class="tabs" id="strategyTop">
+            <button type="button" data-top="5">5</button>
+            <button type="button" data-top="10" class="active">10</button>
+            <button type="button" data-top="20">20</button>
+          </div>
+        </div>
+        <button type="button" id="strategyRun" class="btn-primary">运行回测</button>
+      </div>
+      <p class="sim-hint">股票池评分板前 40；月度调仓；单边 12bp；不含滑点、行业中性；历史回测不代表未来。</p>
+    </div>
+    <div id="strategyResult"></div>
+    <div id="trackingResult"></div>
+  </section>
+
+  <!-- ============ 因子研究 ============ -->
+  <section id="researchView" class="rank-view" hidden>
+    <div class="rank-head">
+      <div>
+        <h1>因子研究</h1>
+        <p id="researchMeta">横截面 IC / ICIR · 五分层 · 多空 · walk-forward</p>
+      </div>
+      <div class="rank-actions">
+        <div class="tabs" id="researchTabs">
+          <button type="button" data-market="cn" class="active">A 股</button>
+          <button type="button" data-market="us">美股</button>
+        </div>
+        <button type="button" id="qualityOpenBtn" class="btn-ghost">数据质量</button>
+        <button type="button" id="fundamentalOpenBtn" class="btn-ghost">基本面</button>
+        <button type="button" id="portfolioOpenBtn" class="btn-ghost">组合优化</button>
+        <button type="button" id="researchClose" class="btn-ghost">返回</button>
+      </div>
+    </div>
+    <div class="card sim-form-card">
+      <div class="sim-form">
+        <div class="sim-field">因子
+          <div class="tabs" id="researchFactors">
+            <button type="button" data-factor="mom20" class="active">20日动量</button>
+            <button type="button" data-factor="mom60">60日动量</button>
+            <button type="button" data-factor="rev5">5日反转</button>
+            <button type="button" data-factor="vol20">低波动</button>
+            <button type="button" data-factor="liq">流动性</button>
+          </div>
+        </div>
+        <button type="button" id="researchRun" class="btn-primary">运行研究</button>
+      </div>
+      <p class="sim-hint">股票池为评分板前 40；月度调仓；单边成本 12bp；存在幸存者偏差，仅用于研究。</p>
+    </div>
+    <div id="researchResult"></div>
+  </section>
+
+  <!-- ============ 资金模拟 ============ -->
+  <section id="simView" class="rank-view" hidden>
+    <div class="rank-head">
+      <div>
+        <h1>资金模拟</h1>
+        <p id="simMeta">输入金额与持有天数，按资金档位与风险偏好给出配置建议</p>
+      </div>
+      <div class="rank-actions">
+        <div class="tabs" id="simTabs">
+          <button type="button" data-market="cn" class="active">A 股</button>
+          <button type="button" data-market="us">美股</button>
+        </div>
+        <button type="button" id="simClose" class="btn-ghost">返回</button>
+      </div>
+    </div>
+
+    <div class="card sim-form-card">
+      <div class="sim-form">
+        <label class="sim-field">金额
+          <span class="sim-input"><i id="simCur">¥</i>
+            <input id="simAmount" type="number" min="100" step="1000" value="100000"></span>
+        </label>
+        <label class="sim-field">持有天数
+          <span class="sim-input"><input id="simDays" type="number" min="1" max="250" value="30"><i>天</i></span>
+        </label>
+        <div class="sim-field">风险偏好
+          <div class="tabs" id="simRisk">
+            <button type="button" data-risk="conservative">保守</button>
+            <button type="button" data-risk="balanced" class="active">稳健</button>
+            <button type="button" data-risk="aggressive">激进</button>
+          </div>
+        </div>
+        <button type="button" id="simRun" class="btn-primary">开始模拟</button>
+      </div>
+      <p class="sim-hint" id="simHint">A 股 T+1、100 股/手；美股 T+0、1 股起。金额按整手/整股向下取整。</p>
+    </div>
+
+    <div id="simResult"></div>
+    <p class="predict-note">模拟基于历史日收益自助抽样（3000 条路径），不代表未来收益；
+      推荐仅按评分、波动与可买性生成，不构成投资建议。</p>
+  </section>
+
+  <!-- ============ 量化评分板 ============ -->
+  <section id="scoreView" class="rank-view" hidden>
+    <div class="rank-head">
+      <div>
+        <h1>量化评分板</h1>
+        <p id="scoreMeta">A 股 · 五维评分前 100</p>
+      </div>
+      <div class="rank-actions">
+        <div class="tabs" id="scoreTabs">
+          <button type="button" data-market="cn" class="active">A 股</button>
+          <button type="button" data-market="us">美股</button>
+        </div>
+        <button type="button" id="scoreRefresh" class="btn-ghost">刷新</button>
+        <button type="button" id="scoreClose" class="btn-ghost">返回</button>
+      </div>
+    </div>
+    <div class="card score-card">
+      <div class="score-head-row">
+        <span>#</span><span>名称 / 代码</span><span>现价</span>
+        <span>当日</span><span>年化</span><span>评分</span><span>评级</span>
+      </div>
+      <div id="scoreTable" class="rank-table"></div>
+    </div>
+    <p class="predict-note">五维评分：趋势 25% · 动量 20% · 风险 20% · 相对强度 20% · 量能 15%。
+      候选池为 A 股成交额前 200 / 美股市值前 200，按评分取前 100。</p>
+  </section>
+
+  <!-- ============ 涨跌榜 ============ -->
+  <section id="rankView" class="rank-view" hidden>
+    <div class="rank-head">
+      <div>
+        <h1>当日涨跌幅榜</h1>
+        <p id="rankMeta">A 股 · 正在加载…</p>
+      </div>
+      <div class="rank-actions">
+        <div class="tabs" id="rankTabs">
+          <button type="button" data-market="cn" class="active">A 股</button>
+          <button type="button" data-market="us">美股</button>
+          <button type="button" data-market="gold">黄金</button>
+        </div>
+        <button type="button" id="rankRefresh" class="btn-ghost">刷新</button>
+        <button type="button" id="rankClose" class="btn-ghost">返回</button>
+      </div>
+    </div>
+    <div class="rank-grid">
+      <div class="card rank-card">
+        <header class="rank-card-head">
+          <span class="rank-title up">涨幅榜</span>
+          <span class="rank-note" id="upCount"></span>
+        </header>
+        <div class="rank-table" id="upTable"></div>
+      </div>
+      <div class="card rank-card">
+        <header class="rank-card-head">
+          <span class="rank-title down">跌幅榜</span>
+          <span class="rank-note" id="downCount"></span>
+        </header>
+        <div class="rank-table" id="downTable"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 欢迎页 ============ -->
+  <section id="welcome" class="welcome">
+    <div class="welcome-head">
+      <span class="pill">LIVE DATA · 腾讯财经</span>
+      <h1>输入一个股票名字，<br><em>把它拆成 30+ 个量化指标。</em></h1>
+      <p>自动抓取前复权日线与实时快照，计算风险收益特征、技术面、相对基准归因，
+         用五维打分模型给出评级，并跑一遍均线策略回测与蒙特卡洛模拟。</p>
+    </div>
+
+    <div id="overview" class="overview">
+      <div id="ovGrid" class="ov-grid">
+        <div class="ov-loading">加载市场概览…</div>
+      </div>
+      <div class="ov-breadth">
+        <div class="breadth-card" id="breadthCn"></div>
+        <div class="breadth-card" id="breadthUs"></div>
+      </div>
+    </div>
+    <div class="welcome-grid">
+      <article class="feature">
+        <span class="feature-ico">01</span>
+        <h3>真实行情，自动联网</h3>
+        <p>名称/代码输入 → 自动解析证券 → 拉取近 3 年前复权日线 + 实时报价，无需手工填数据。</p>
+      </article>
+      <article class="feature">
+        <span class="feature-ico">02</span>
+        <h3>风险收益全景</h3>
+        <p>年化收益、波动、夏普、索提诺、最大回撤与修复天数、VaR/CVaR、偏度峰度一次算清。</p>
+      </article>
+      <article class="feature">
+        <span class="feature-ico">03</span>
+        <h3>五维量化评分</h3>
+        <p>趋势 25% + 动量 20% + 风险 20% + 相对强度 20% + 量能 15%，规则透明可复盘。</p>
+      </article>
+      <article class="feature">
+        <span class="feature-ico">04</span>
+        <h3>策略回测 + 概率模拟</h3>
+        <p>双均线趋势跟踪回测（含成本），参数网格寻优；用历史收益自助抽样模拟未来 60 日价格分布。</p>
+      </article>
+    </div>
+    <p class="welcome-note">数据来自公开行情接口，仅用于研究与学习，不构成投资建议。
+      <a class="download-link" href="/download/app">下载 ZIP 源码包（约 0.25 MB，解压后运行 Start.cmd，需 Python 3.11+）</a></p>
+  </section>
+
+  <!-- ============ 加载 ============ -->
+  <section id="loading" class="loading" hidden>
+    <div class="spinner"></div>
+    <div>
+      <strong>正在拉取行情并计算…</strong>
+      <p id="loadingText">解析证券代码 · 下载前复权日线 · 运行量化模型</p>
+    </div>
+  </section>
+
+  <!-- ============ 错误 ============ -->
+  <section id="errorBox" class="error-box" hidden>
+    <strong>分析失败</strong>
+    <p id="errorText"></p>
+    <button type="button" class="btn-ghost" onclick="document.getElementById('query').focus()">换个股票试试</button>
+  </section>
+
+  <!-- ============ 结果区 ============ -->
+  <div id="content" class="content" hidden>
+
+    <!-- 概览 -->
+    <section class="card hero" id="hero"></section>
+
+    <!-- KPI -->
+    <section class="kpi-grid" id="kpiGrid"></section>
+
+    <!-- 走势 + 评分 -->
+    <section class="card chart-card span-8">
+      <header class="card-head">
+        <div>
+          <h2>价格与走势</h2>
+          <p id="chartSub">前复权收盘价 · 均线系统</p>
+        </div>
+        <div class="tabs" id="chartTabs" role="tablist">
+          <button type="button" data-tab="price" class="active" role="tab">走势</button>
+          <button type="button" data-tab="drawdown" role="tab">回撤</button>
+          <button type="button" data-tab="relative" role="tab">相对强弱</button>
+        </div>
+      </header>
+      <div id="mainChart" class="chart"></div>
+    </section>
+
+    <section class="card span-4 score-card">
+      <header class="card-head">
+        <div><h2>量化评分</h2><p>五维加权 · 0–100</p></div>
+        <span class="badge" id="scoreSignal"></span>
+      </header>
+      <div class="score-main">
+        <div id="gauge" class="gauge"></div>
+        <div class="score-side">
+          <p class="score-grade" id="scoreGrade"></p>
+          <p class="muted" id="scoreUpdated"></p>
+        </div>
+      </div>
+      <div id="radar" class="radar"></div>
+      <div id="dimBars" class="dim-bars"></div>
+      <div id="scoreFormula" class="score-formula"></div>
+    </section>
+
+    <!-- 计算过程 -->
+    <section class="card span-12 calc-card">
+      <header class="card-head">
+        <div><h2>模型计算过程</h2><p>按分析顺序展开 · 公式与当期数值</p></div>
+        <span class="badge soft">可复盘</span>
+      </header>
+      <div id="calcTable" class="calc-table"></div>
+    </section>
+
+    <!-- 技术面 + 关键价位 -->
+    <section class="card span-7">
+      <header class="card-head">
+        <div><h2>技术面快照</h2><p id="techSub">均线 · 动量 · 波动</p></div>
+        <span class="badge soft" id="trendBadge"></span>
+      </header>
+      <div id="techGrid" class="tech-grid"></div>
+      <div class="divider"></div>
+      <div class="levels" id="levels"></div>
+      <p class="formula-line">RSI = 100 − 100/(1+RS) · MACD 柱 = 2×(DIF−DEA) · KDJ: K = EMA₃(RSV) · BOLL = MA₂₀ ± 2σ₂₀</p>
+    </section>
+
+    <section class="card span-5">
+      <header class="card-head">
+        <div><h2>区间收益</h2><p>与基准对比</p></div>
+      </header>
+      <div id="periodTable" class="period-table"></div>
+      <div class="divider"></div>
+      <div id="relStats" class="mini-stats"></div>
+      <div class="divider"></div>
+      <h3 class="sub-title">进阶指标 <span class="hint">公式见「模型」</span></h3>
+      <div id="advStats" class="mini-stats"></div>
+    </section>
+
+    <!-- 回测 -->
+    <section class="card span-12">
+      <header class="card-head">
+        <div>
+          <h2>策略回测 · 双均线趋势跟踪</h2>
+          <p id="btSub">快线上穿慢线次日满仓，下穿次日空仓，单边成本 12bp</p>
+        </div>
+        <div class="bt-badges" id="btBadges"></div>
+      </header>
+      <p class="formula-line">持仓 = 1{MA_fast(t−1) &gt; MA_slow(t−1)} · r_策略 = 持仓×r_t − |Δ持仓|×12bp</p>
+      <div class="bt-layout">
+        <div class="chart" id="btChart"></div>
+        <div class="bt-side">
+          <div id="btMetrics" class="bt-metrics"></div>
+          <h3 class="sub-title">参数网格寻优 <span class="hint">按夏普排序</span></h3>
+          <div id="btGrid" class="table-wrap"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 蒙特卡洛 + 月度 -->
+    <section class="card span-6">
+      <header class="card-head">
+        <div><h2>未来 60 日模拟</h2><p>历史日收益自助抽样 · 3000 条路径</p></div>
+      </header>
+      <p class="formula-line">P_{t+1} = P_t × (1 + r*)，r* 为近 504 个日日收益有放回抽样</p>
+      <div id="fanChart" class="chart"></div>
+      <div id="mcStats" class="mc-stats"></div>
+    </section>
+
+    <section class="card span-6">
+      <header class="card-head">
+        <div><h2>月度收益</h2><p>红涨绿跌 · 单位 %</p></div>
+      </header>
+      <div id="heatmap" class="heatmap"></div>
+      <div id="monthlySummary" class="monthly-summary"></div>
+    </section>
+
+    <!-- 数据源 -->
+    <section class="card span-12 links-card">
+      <div>
+        <h2>数据来源与延伸阅读</h2>
+        <p class="muted" id="metaLine"></p>
+      </div>
+      <div id="sourceLinks" class="source-links"></div>
+      <p class="disclaimer" id="disclaimer"></p>
+    </section>
+
+    <div class="toolbar">
+      <button type="button" class="btn-ghost" id="refreshBtn">刷新数据</button>
+      <button type="button" class="btn-ghost" id="csvBtn">导出指标 CSV</button>
+      <button type="button" class="btn-ghost" id="printBtn">打印 / 存为 PDF</button>
+    </div>
+  </div>
+</main>
+
+<footer class="site-footer">
+  <span>量析 StockQuant · 本地运行，行情实时抓取</span>
+  <span>v1.1 · 仅供研究学习 · 不构成投资建议</span>
+</footer>
+
+<div id="mobileModal" class="modal" hidden>
+  <div class="modal-card">
+    <button type="button" class="modal-close" id="mobileClose" aria-label="关闭">×</button>
+    <h3>手机访问</h3>
+    <p class="muted">手机与电脑连接同一个 Wi-Fi，扫码即可打开；二维码包含访问口令，未授权设备无法访问。</p>
+    <img id="qrImg" class="qr" alt="手机访问二维码">
+    <div class="url-row">
+      <code id="lanUrl">获取中…</code>
+      <button type="button" id="copyUrl" class="btn-ghost">复制</button>
+    </div>
+    <ol class="mobile-steps">
+      <li>手机浏览器扫码，或手动输入上面的地址</li>
+      <li>浏览器菜单 →「添加到主屏幕」</li>
+      <li>从桌面图标打开，即全屏运行</li>
+    </ol>
+    <p class="muted small">首次访问若被 Windows 防火墙拦截，请允许 Python 的「专用网络」访问。</p>
+  </div>
+</div>
+
+<div id="basisModal" class="modal" hidden>
+  <div class="modal-card basis-card">
+    <button type="button" class="modal-close" id="basisClose" aria-label="关闭">×</button>
+    <h3 id="basisTitle">预测依据</h3>
+    <p id="basisMeta" class="muted small"></p>
+    <div id="basisBars"></div>
+    <div id="basisFormula" class="formula-line"></div>
+    <div id="basisNews" class="basis-news"></div>
+    <p id="basisReason" class="muted small"></p>
+    <div class="basis-actions">
+      <button type="button" id="basisAnalyze" class="btn-primary">查看完整分析</button>
+      <button type="button" id="basisCancel" class="btn-ghost">关闭</button>
+    </div>
+  </div>
+</div>
+
+<div id="tooltip" class="tooltip" hidden></div>
+
+<script src="app.js?v=2026112102"></script>
+</body>
+</html>
